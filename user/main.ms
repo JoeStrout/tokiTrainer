@@ -17,6 +17,13 @@ cd
 crateImg = file.loadImage("/sys/pics/Block.png")
 burstImg = file.loadImage("/sys/pics/Burst.png")
 
+hitSound = file.loadSound("/sys/sounds/pew.wav")
+popSound = file.loadSound("/sys/sounds/pop.wav")
+missSound = file.loadSound("/sys/sounds/swoosh.wav")
+keySound = file.loadSound("/sys/sounds/hihat.wav")
+backspaceSound = file.loadSound("/sys/sounds/hihat2.wav")
+lossSound = file.loadSound("/sys/sounds/airburst.wav")
+
 pona = "pona"
 emoji = "emoji"
 kanji = "kanji"
@@ -133,6 +140,7 @@ Block.burst = function()
 	self.rotation = mathUtil.randRange(0, 360)
 	self.bursting = true
 	self.tpWord = ""
+	popSound.play
 end function
 
 Block.make = function()
@@ -153,6 +161,7 @@ Block.make = function()
 end function
 
 clear
+import "background"
 turret.initialize
 
 fallingBlocks = []
@@ -163,14 +172,16 @@ sd = display(4)
 entry = ""
 
 shootDown = function(block)
+	hitSound.play 1, 0, mathUtil.randRange(0.8, 1.2)
 	turret.aimAt block
-	gunX = turret.barrel.x
-	gunY = turret.barrel.y
-	gfx.line gunX, gunY, block.x, block.y, color.yellow, 3
+	ang = turret.barrel.rotation * pi/180
+	gunX = turret.barrel.x + 54 * cos(ang)
+	gunY = turret.barrel.y + 54 * sin(ang)
+	display(2).line gunX, gunY, block.x, block.y, color.yellow, 4
 	yield
 	block.burst
-	gfx.line gunX, gunY, block.x, block.y, color.clear, 3
-	globals.score = score + block.y
+	display(2).line gunX, gunY, block.x, block.y, color.clear, 5
+	globals.score = score + round(block.y/5)
 	turret.showScore score
 end function
 
@@ -182,7 +193,7 @@ fire = function
 			return
 		end if
 	end for
-	// ToDo: sound effect of mistyping
+	missSound.play 1, 0, mathUtil.randRange(0.8, 1.2)
 end function
 
 handleKey = function
@@ -192,8 +203,10 @@ handleKey = function
 		outer.entry = ""
 	else if k == char(8) then  // backspace
 		if entry then outer.entry = entry[:-1]
+		backspaceSound.play 0.5, 0, mathUtil.randRange(0.9, 1.0)
 	else if entry.len < 20 then
 		outer.entry = entry + k.upper
+		keySound.play 0.5, 0, mathUtil.randRange(0.9, 1.0)
 	end if
 	text.delimiter = ""
 	text.row = 6; text.column = 20; print " " * 35
@@ -218,6 +231,7 @@ turret.showScore score
 // Main loop
 while true
 	yield
+	background.update
 	if time > nextNewBlockTime and wordsLeft then
 		Block.make
 		turret.showWordsLeft wordsLeft.len
