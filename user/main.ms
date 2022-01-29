@@ -3,6 +3,12 @@
 import "listUtil"
 import "mathUtil"
 
+if not globals.hasIndex("options") then
+	options = {}
+	options.level = 1
+	options.writing = ["pona", "emoji", "kanji"]
+end if
+
 cd
 
 crateImg = file.loadImage("/sys/pics/Block.png")
@@ -11,48 +17,86 @@ burstImg = file.loadImage("/sys/pics/Burst.png")
 pona = "pona"
 emoji = "emoji"
 kanji = "kanji"
-writingSystems = [pona, emoji, kanji]
 
 blockSize = 108
 floorY = 20
 
 tpWords = []
-engWords = []
+tpToKeyword = {}
 for line in file.readLines("wordList.tsv")
 	parts = line.split(char(9))
+	if parts[1] == "Keyword" then continue // (header line)
 	tpWords.push parts[0]
-	engWords.push parts[1]
+	tpToKeyword[parts[0]] = parts[1]
 end for
 
-drawBlock = function(g, tpWord, system, left=0, bottom=0)
+getWordsForLevel = function(level=1)
+	result = []
+	endIdx = level * 5
+	// Most recent words, 3 times each
+	for i in range(endIdx-4, endIdx)
+		result.push tpWords[i]
+		result.push tpWords[i]
+		result.push tpWords[i]
+	end for
+	// 5 words before that, 2 times each
+	if endIdx-9 >= 0 then
+		for i in range(endIdx-9, endIdx-5)
+			result.push tpWords[i]
+			result.push tpWords[i]
+		end for
+	end if
+	// 5 words before that, once each
+	if endIdx-14 >= 0 then
+		for i in range(endIdx-14, endIdx-10)
+			result.push tpWords[i]
+		end for
+	end if
+	// And finally, 20 randomly chosen words.
+	for i in range(19)
+		result.push tpWords[rnd * (endIdx + 1)]
+	end for
+	return result
+end function
+
+drawBlock = function(g, tpWord, system, drawTp=true, left=0, bottom=0)
 	g.drawImage crateImg, left, bottom, blockSize, blockSize
-	idx = tpWords.indexOf(tpWord)
-	if idx == null then 
+	if not tpToKeyword.hasIndex(tpWord) then
 		print "No such word: " + tpWord
 		exit
 	end if
 	h = blockSize/2
+	
 	// draw the glyph
 	glyph = file.loadImage(system + "/" + tpWord + ".png")
-	g.drawImage glyph, left + h - glyph.width/2, 
-	   bottom + h - glyph.height/2
+	if glyph == null then
+		print "Couldn't find glyph for: " + tpWord
+	else
+		g.drawImage glyph, left + h - glyph.width/2, 
+		bottom + h - glyph.height/2
+	end if
+	
 	// draw the English keyword
-	w = engWords[idx]
+	w = tpToKeyword[tpWord]
 	g.print w, left + h - 8 * w.len/2, bottom + 9, color.black, "small"
-	// draw the Toki Pona word
-	g.print tpWord, left + h - 8 * tpWord.len/2, 
-	   bottom + blockSize - 23, color.black, "small"
+	
+	if drawTp then
+		// draw the Toki Pona word
+		g.print tpWord, left + h - 8 * tpWord.len/2, 
+		bottom + blockSize - 23, color.black, "small"
+	end if
 end function
 
 compositeBuffer = new PixelDisplay
-makeSpriteImage = function(tpWord, system, drawTP=false)
+makeSpriteImage = function(tpWord, system, drawTp=false)
 	compositeBuffer.clear color.clear, blockSize, blockSize
-	drawBlock compositeBuffer, tpWord, system
+	drawBlock compositeBuffer, tpWord, system , drawTp
 	return compositeBuffer.getImage(0, 0, blockSize, blockSize)
 end function
 
 Block = new Sprite
 Block.tpWord = ""
+Block.system = "pona"
 Block.landed = false
 Block.bursting = false
 Block.burstFrames = 0
@@ -75,6 +119,7 @@ Block.update = function
 	if self.y + dy - blockSize/2 < floorY then
 		self.y = floorY + blockSize/2
 		self.landed = true
+		self.image = makeSpriteImage(self.tpWord, self.system, true)
 	else
 		self.y = self.y + dy
 	end if
@@ -88,9 +133,16 @@ Block.burst = function()
 end function
 
 Block.make = function()
+	if not wordsLeft then return null
 	noob = new Block
-	noob.tpWord = tpWords[:5].any
-	noob.image = makeSpriteImage(noob.tpWord, writingSystems.any, true)
+	noob.tpWord = wordsLeft.pop
+	noob.system = options.writing.any
+	showLabel = false
+	if labelsToShow.hasIndex(noob.tpWord) then
+		showLabel = true
+		labelsToShow.remove noob.tpWord
+	end if
+	noob.image = makeSpriteImage(noob.tpWord, noob.system, showLabel)
 	noob.x = mathUtil.randRange(100, 860)
 	noob.y = 640
 	sd.sprites.push noob
@@ -142,13 +194,23 @@ handleKey = function
 	text.delimiter = char(13)
 end function
 
-// Main loop
+// Prepare the level
 nextNewBlockTime = 0
+wordsLeft = getWordsForLevel(options.level)
+labelsToShow = {}
+for w in wordsLeft[:25]; labelsToShow.push w; end for
+wordsLeft.shuffle
+minDelay = 0.2
+maxDelay = 4
+totalWordCount = wordsLeft.len
+
+// Main loop
 while true
 	yield
-	if time > nextNewBlockTime then
+	if time > nextNewBlockTime and wordsLeft then
 		Block.make
-		nextNewBlockTime = time + mathUtil.randRange(1,4)
+		delay = mathUtil.lerp(minDelay, maxDelay, wordsLeft.len / totalWordCount)
+		nextNewBlockTime = time + delay * mathUtil.randRange(0.8, 1.2)
 	end if
 	for sp in sd.sprites
 		sp.update
