@@ -2,12 +2,15 @@
 
 import "listUtil"
 import "mathUtil"
+import "turret"
 
 if not globals.hasIndex("options") then
 	options = {}
 	options.level = 1
 	options.writing = ["pona", "emoji", "kanji"]
 end if
+
+score = 0
 
 cd
 
@@ -19,7 +22,7 @@ emoji = "emoji"
 kanji = "kanji"
 
 blockSize = 108
-floorY = 20
+floorY = 0
 
 tpWords = []
 tpToKeyword = {}
@@ -32,7 +35,7 @@ end for
 
 getWordsForLevel = function(level=1)
 	result = []
-	endIdx = level * 5
+	endIdx = level * 5 - 1
 	// Most recent words, 3 times each
 	for i in range(endIdx-4, endIdx)
 		result.push tpWords[i]
@@ -150,6 +153,7 @@ Block.make = function()
 end function
 
 clear
+turret.initialize
 
 fallingBlocks = []
 landedBlocks = []
@@ -159,16 +163,20 @@ sd = display(4)
 entry = ""
 
 shootDown = function(block)
-	gunX = 480
-	gunY = floorY + 20
+	turret.aimAt block
+	gunX = turret.barrel.x
+	gunY = turret.barrel.y
 	gfx.line gunX, gunY, block.x, block.y, color.yellow, 3
 	yield
 	block.burst
 	gfx.line gunX, gunY, block.x, block.y, color.clear, 3
+	globals.score = score + block.y
+	turret.showScore score
 end function
 
 fire = function
 	for sp in sd.sprites
+		if not sp isa Block then continue
 		if not sp.landed and sp.tpWord.upper == entry then
 			shootDown sp
 			return
@@ -188,7 +196,7 @@ handleKey = function
 		outer.entry = entry + k.upper
 	end if
 	text.delimiter = ""
-	text.row = 0; text.column = 20; print " " * 35
+	text.row = 6; text.column = 20; print " " * 35
 	text.column = 34 - entry.len / 2
 	text.print entry
 	text.delimiter = char(13)
@@ -203,12 +211,16 @@ wordsLeft.shuffle
 minDelay = 0.2
 maxDelay = 4
 totalWordCount = wordsLeft.len
+turret.showLevel options.level
+turret.showWordsLeft wordsLeft.len
+turret.showScore score
 
 // Main loop
 while true
 	yield
 	if time > nextNewBlockTime and wordsLeft then
 		Block.make
+		turret.showWordsLeft wordsLeft.len
 		delay = mathUtil.lerp(minDelay, maxDelay, wordsLeft.len / totalWordCount)
 		nextNewBlockTime = time + delay * mathUtil.randRange(0.8, 1.2)
 	end if
