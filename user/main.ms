@@ -3,6 +3,7 @@
 import "listUtil"
 import "mathUtil"
 import "turret"
+import "title"
 
 if not globals.hasIndex("options") then
 	options = {}
@@ -131,6 +132,7 @@ Block.update = function
 		self.y = floorY + blockSize/2
 		self.landed = true
 		self.image = makeSpriteImage(self.tpWord, self.system, true)
+		checkGameOver
 	else
 		self.y = self.y + dy
 	end if
@@ -155,22 +157,17 @@ Block.make = function()
 		labelsToShow.remove noob.tpWord
 	end if
 	noob.image = makeSpriteImage(noob.tpWord, noob.system, showLabel)
-	noob.x = mathUtil.randRange(100, 860)
+	if rnd < 0.5 then
+		noob.x = mathUtil.randRange(100, 380)
+	else
+		noob.x = mathUtil.randRange(570, 860)
+	end if
 	noob.y = 640
 	sd.sprites.push noob
 	return noob
 end function
 
-clear
-import "background"
-turret.initialize
-
-fallingBlocks = []
-landedBlocks = []
-
 sd = display(4)
-
-entry = ""
 
 checkLevelOver = function()
 	// check for level-over
@@ -179,6 +176,19 @@ checkLevelOver = function()
 		if sp isa Block then return
 	end for
 	endLevel
+end function
+
+checkGameOver = function()
+	count = 0
+	for sp in sd.sprites
+		if sp isa Block and sp.landed then count = count + 1
+	end for
+	if count > 2 then
+		outer.gameOver = true
+		printCentered "GAME OVER", 15
+		printCentered "Your Score:", 13
+		printCentered ("000000" + score)[-6:], 12
+	end if
 end function
 
 shootDown = function(block)
@@ -270,7 +280,12 @@ startLevel = function()
 		end for
 	end if
 	
-	printCentered "Press Spacebar to begin!", 6, color.silver
+	turret.showLevel options.level
+	turret.showWordsLeft wordsLeft.len
+	turret.showScore score
+	
+	wait
+	printCentered "Press Spacebar to continue", 6, color.silver
 	while true
 		if key.get == " " then break
 	end while
@@ -306,12 +321,26 @@ gameLoop = function()
 end function
 
 // Main loop
+clear
+import "background"
+
+fallingBlocks = []
+landedBlocks = []
+entry = ""
+
+startingLevel = 1
 while true
-	startLevel
-	gameLoop
-	if gameOver then exit
-	options.level = options.level + 1
+	score = 0
+	options.level = startingLevel
+	title.doTitle
+	startingLevel = options.level
+	turret.initialize
+	while true
+		startLevel
+		gameLoop
+		if gameOver then break
+		options.level = options.level + 1
+	end while
+	key.clear; key.get
 end while
-
-
 
