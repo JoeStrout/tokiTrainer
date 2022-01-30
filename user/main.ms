@@ -133,6 +133,7 @@ Block.update = function
 		self.landed = true
 		self.image = makeSpriteImage(self.tpWord, self.system, true)
 		checkGameOver
+		if not gameOver then checkLevelOver
 	else
 		self.y = self.y + dy
 	end if
@@ -173,7 +174,7 @@ checkLevelOver = function()
 	// check for level-over
 	if wordsLeft then return
 	for sp in sd.sprites
-		if sp isa Block then return
+		if sp isa Block and not sp.landed then return
 	end for
 	endLevel
 end function
