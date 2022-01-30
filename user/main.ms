@@ -117,6 +117,7 @@ Block.update = function
 		self.burstFrames = self.burstFrames + 1
 		if self.burstFrames > 5 then
 			sd.sprites.removeVal self
+			checkLevelOver
 		else
 			t = self.burstFrames / 5
 			self.scale = mathUtil.lerp(1, 1.5, t)
@@ -171,6 +172,15 @@ sd = display(4)
 
 entry = ""
 
+checkLevelOver = function()
+	// check for level-over
+	if wordsLeft then return
+	for sp in sd.sprites
+		if sp isa Block then return
+	end for
+	endLevel
+end function
+
 shootDown = function(block)
 	hitSound.play 1, 0, mathUtil.randRange(0.8, 1.2)
 	turret.aimAt block
@@ -182,7 +192,7 @@ shootDown = function(block)
 	block.burst
 	display(2).line gunX, gunY, block.x, block.y, color.clear, 5
 	globals.score = score + round(block.y/5)
-	turret.showScore score
+	turret.showScore score	
 end function
 
 fire = function
@@ -194,6 +204,16 @@ fire = function
 		end if
 	end for
 	missSound.play 1, 0, mathUtil.randRange(0.8, 1.2)
+end function
+
+printCentered = function(s, row, color="#CCCCCC")
+	text.delimiter = ""
+	text.row = row; text.column = 0; print " " * 68
+	if s then
+		text.row = row; text.column = 34 - s.len/2
+		text.color = color; print s
+	end if
+	text.delimiter = char(13)
 end function
 
 handleKey = function
@@ -208,39 +228,90 @@ handleKey = function
 		outer.entry = entry + k.upper
 		keySound.play 0.5, 0, mathUtil.randRange(0.9, 1.0)
 	end if
-	text.delimiter = ""
-	text.row = 6; text.column = 20; print " " * 35
-	text.column = 34 - entry.len / 2
-	text.print entry
-	text.delimiter = char(13)
+	printCentered entry, 6, "#FFFF88"
 end function
 
-// Prepare the level
-nextNewBlockTime = 0
-wordsLeft = getWordsForLevel(options.level)
-labelsToShow = {}
-for w in wordsLeft[:25]; labelsToShow.push w; end for
-wordsLeft.shuffle
-minDelay = 0.2
-maxDelay = 4
-totalWordCount = wordsLeft.len
-turret.showLevel options.level
-turret.showWordsLeft wordsLeft.len
-turret.showScore score
+endLevel = function()
+	text.clear
+	printCentered "LEVEL " + options.level + " COMPLETE!", 15
+	wait 3
+	text.clear
+	outer.levelDone = true
+end function
+
+startLevel = function()
+	outer.levelDone = false
+	outer.gameOver = false
+	
+	// Remove all blocks from the screen
+	for i in range(sd.sprites.len-1)
+		if sd.sprites[i] isa Block then sd.sprites.remove i
+	end for
+	
+	// Prepare the new word list
+	outer.wordsLeft = getWordsForLevel(options.level)
+	outer.labelsToShow = {}
+	for w in wordsLeft[:25]; labelsToShow.push w; end for
+	
+	// Show the level info
+	printCentered "LEVEL " + options.level, 20, color.yellow
+	g = display(2)
+	for i in range(0,4)  // including new words
+		img = makeSpriteImage(wordsLeft[i*3], options.writing.any, true)
+		g.drawImage img, 480 + (i-2) * 100 - img.width/2, 350
+	end for
+	if options.level > 1 then
+		sc = 0.75  // scale factor
+		for i in range(0,4)  // and last-round words
+			img = makeSpriteImage(wordsLeft[15+i*2], options.writing.any, true)
+			g.drawImage img, 
+			480 + (i-2) * 100*sc - img.width*sc/2, 250,
+			img.width*sc, img.height*sc			
+		end for
+	end if
+	
+	printCentered "Press Spacebar to begin!", 6, color.silver
+	while true
+		if key.get == " " then break
+	end while
+	
+	wordsLeft.shuffle	
+	
+	text.clear
+	g.clear color.clear
+	turret.showLevel options.level
+	turret.showWordsLeft wordsLeft.len
+	turret.showScore score
+end function
+
+gameLoop = function()
+	nextNewBlockTime = 0
+	minDelay = 0.2
+	maxDelay = 4
+	totalWordCount = wordsLeft.len
+	while not levelDone and not gameOver
+		yield
+		background.update
+		if time > nextNewBlockTime and wordsLeft then
+			Block.make
+			turret.showWordsLeft wordsLeft.len
+			delay = mathUtil.lerp(minDelay, maxDelay, wordsLeft.len / totalWordCount)
+			nextNewBlockTime = time + delay * mathUtil.randRange(0.8, 1.2)
+		end if
+		for sp in sd.sprites
+			sp.update
+		end for
+		if key.available then handleKey
+	end while
+end function
 
 // Main loop
 while true
-	yield
-	background.update
-	if time > nextNewBlockTime and wordsLeft then
-		Block.make
-		turret.showWordsLeft wordsLeft.len
-		delay = mathUtil.lerp(minDelay, maxDelay, wordsLeft.len / totalWordCount)
-		nextNewBlockTime = time + delay * mathUtil.randRange(0.8, 1.2)
-	end if
-	for sp in sd.sprites
-		sp.update
-	end for
-	if key.available then handleKey
+	startLevel
+	gameLoop
+	if gameOver then exit
+	options.level = options.level + 1
 end while
+
+
 
